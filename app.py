@@ -102,6 +102,8 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="stat-label">Hero & Quick Note (Optional)</div>
       <input type="text" id="hero_name" placeholder="Hero (e.g., Tracer, Ana, Winston)" />
       <input type="text" id="notes" placeholder="Notes (e.g., Rubber-banded in OT fight)" />
+      
+      <button type="button" class="submit" id="timer-btn" style="background:#2563eb; margin-bottom:10px;" onclick="toggleTimer()">Start Match Timer</button>
       <button class="submit" onclick="logMatch()">Log Match + Link Live Telemetry</button>
       <div id="save-msg" style="margin-top:8px; font-size:0.85rem; color:var(--green);"></div>
     </div>
@@ -174,25 +176,52 @@ async function refreshTelemetry() {
   netChart.update();
 }
 
+var matchStart = null, matchTimer = null, elapsedSec = 0;
+function toggleTimer() {
+  var btn = document.getElementById("timer-btn");
+  if (!matchTimer) {
+    if (!matchStart) { matchStart = Date.now(); elapsedSec = 0; }
+    btn.style.background = "#16a34a";
+    matchTimer = setInterval(function() {
+      elapsedSec = Math.floor((Date.now() - matchStart) / 1000);
+      btn.textContent = "Stop Timer (" + Math.floor(elapsedSec / 60) + "m " + (elapsedSec % 60) + "s)";
+    }, 1000);
+  } else {
+    clearInterval(matchTimer); matchTimer = null;
+    btn.style.background = "#475569";
+    btn.textContent = "Recorded: " + Math.floor(elapsedSec / 60) + "m " + (elapsedSec % 60) + "s (Tap to resume)";
+  }
+}
+
 async function logMatch() {
+  if (matchTimer) toggleTimer();
+  var noteInput = document.getElementById("notes");
+  if (elapsedSec > 0) {
+    noteInput.value = ("[" + Math.floor(elapsedSec / 60) + "m " + (elapsedSec % 60) + "s] " + noteInput.value).trim();
+  }
   const payload = Object.assign({}, formState, {
     hero_name: document.getElementById("hero_name").value.trim(),
-    notes: document.getElementById("notes").value.trim()
+    notes: noteInput.value.trim(),
   });
   const res = await fetch("/api/matches", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
   if (res.ok) {
     document.getElementById("hero_name").value = "";
-    document.getElementById("notes").value = "";
+    noteInput.value = "";
+    matchStart = null; elapsedSec = 0;
+    var tBtn = document.getElementById("timer-btn");
+    tBtn.style.background = "#2563eb";
+    tBtn.textContent = "Start Match Timer";
     const msg = document.getElementById("save-msg");
-    msg.textContent = "Match logged and linked to last 10 minutes of network telemetry!";
-    setTimeout(() => msg.textContent = "", 4000);
+    msg.textContent = "Match logged & linked to live telemetry!";
+    setTimeout(() => (msg.textContent = ""), 3500);
     refreshTelemetry();
   }
 }
+
 
 refreshTelemetry();
 setInterval(refreshTelemetry, 10000);
@@ -268,4 +297,5 @@ def add_match():
     return jsonify({"status": "saved", "session_id": session_id}), 201
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+   
+   app.run(host="0.0.0.0", port=5000)
